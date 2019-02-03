@@ -18,6 +18,9 @@ data %>%
   summarise(count=n()) %>%
   mutate(perc=count/sum(count)) %>%
   ggplot() +
+  geom_segment(data=data.frame(x=seq(1950,2020,10)),
+               aes(x=x,xend=x,y=0,yend=0.6),
+               colour="grey80")+
   geom_smooth(aes(x=year,y=perc,colour=Winner_Type),se=F,size=1.5) +
   scale_y_continuous("% of games",labels = scales::percent_format(accuracy=1))+
   scale_x_continuous("")+
