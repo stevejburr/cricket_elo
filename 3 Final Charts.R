@@ -84,14 +84,14 @@ ggsave("home_advantage_simple.png",units="in",dpi=72,width=700/72,height=700/72)
 
 ggplot() +
   geom_segment(data=data.frame(x=seq(1950,2020,10)),
-               aes(x=x,xend=x,y=0,yend=0.45),
+               aes(x=x,xend=x,y=-0.45,yend=0.45),
                colour="grey80")+
   geom_point(data=home_away_raw,aes(x=year,y=gap),size=2,colour="blue",alpha=0.5)+
   geom_smooth(data=home_away_raw,aes(x=year,y=gap),se=F,colour="blue",size=1.5) +
   scale_y_continuous("Home win rate advantage / % points",
-                     breaks=seq(0,0.45,0.05),
+                     breaks=seq(-0.45,0.45,0.10),
                      labels=scales::percent_format(accuracy=1)) +
-  coord_cartesian(ylim=c(0,0.45)) +
+  coord_cartesian(ylim=c(-0.45,0.45)) +
   scale_x_continuous("",
                      breaks=seq(1960,2020,20))+
   theme_minimal() +
