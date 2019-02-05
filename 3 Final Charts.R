@@ -145,15 +145,17 @@ data %>%
   mutate(Elo=if_else(year<min,as.double(NA),Elo)) -> country_elos_over_time
 
 
+png("test_cricket_elo.png",width=700,height=700,res=72,type="cairo-png")
+
 ggplot(country_elos_over_time) +
   geom_segment(data=data.frame(x=seq(1950,2020,10)),
                aes(x=x,xend=x,y=600,yend=1400),
                colour="grey80")+
   geom_line(aes(x=year,y=Elo,colour=Country),show.legend = F,size=1.5) +
   geom_text_repel(data=(country_elos_over_time %>% filter(year==2019)),
-            aes(x=2022,y=Elo,colour=Country,label=Country),
-            direction="y",segment.size=NA,show.legend = F,
-            hjust="left",size=8) +
+                  aes(x=2022,y=Elo,colour=Country,label=Country),
+                  direction="y",segment.size=NA,show.legend = F,
+                  hjust="left",size=8) +
   scale_x_continuous("",breaks=seq(1960,2020,20)) +
   scale_y_continuous("Team Elo Rating")+
   scale_colour_manual("Team",values=c("Australia"="#dddd0f",
@@ -170,13 +172,59 @@ ggplot(country_elos_over_time) +
   coord_cartesian(xlim=c(1946,2040))+
   theme_minimal() +
   theme(panel.grid = element_blank(),
-        text=element_text(colour="grey50",size=20),
+        text=element_text(colour="grey50",size=17),
         axis.title=element_text(colour="grey50"),
         axis.text=element_text(colour="grey50"))+
-  labs(title="In 2007 Australia reached the highest ever Test Elo Rating",
-  caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr") 
-  
-ggsave("test_cricket_elo.png",units="in",dpi=72,width=700/72,height=700/72)
+  labs(title="In 2007 Australia reached the highest ever year end Test Elo Rating",
+       caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr") 
+dev.off()
+
+
+#add a facetted country plot by country, with a benchmark by year
+
+
+png("test_cricket_elo_facet.png",width=700,height=700,res=72,type="cairo-png")
+
+#build top elo in year field:
+country_elos_over_time %>%
+  filter(!is.na(Elo)) %>%
+  group_by(year) %>%
+  summarise(benchmark=max(Elo)) %>%
+  right_join(country_elos_over_time) -> country_elos_over_time
+
+
+ggplot(country_elos_over_time) +
+  facet_wrap(.~Country,nrow=2)+
+  geom_line(aes(x=year,y=benchmark),
+            colour="grey50",show.legend = F,size=1) +
+  geom_line(aes(x=year,y=Elo,colour=Country),show.legend = F,size=1.5) +
+  scale_x_continuous("",breaks=seq(1960,2020,60)) +
+  scale_y_continuous("Team Elo Rating")+
+  scale_colour_manual("Team",values=c("Australia"="#dddd0f",
+                                      "Bangladesh"="#005600",
+                                      "England"="#013166",
+                                      "India"="#00b8ff",
+                                      "New Zealand"="#000000",
+                                      "Pakistan"="#008080",
+                                      "South Africa"="#006651",
+                                      "Sri Lanka"="#0000FF",
+                                      "West Indies"="#800000",
+                                      "Zimbabwe"="#FF0000")
+  )+
+  coord_cartesian(xlim=c(1946,2040))+
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text=element_text(colour="grey50"),
+        text=element_text(colour="grey50",size=17),
+        axis.title=element_text(colour="grey50"),
+        axis.text=element_text(colour="grey50"))+
+  labs(title="In 2007 Australia reached the highest ever year end Test Elo Rating",
+       subtitle="Grey line shows the rating of the best team in the world",
+       caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr") 
+dev.off()
+
+
 #look @ different calculations
 data %>%
   filter(year<2019) %>%
