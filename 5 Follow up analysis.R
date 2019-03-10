@@ -90,3 +90,102 @@ ggplot(home_away_elo) +
        caption="Trends are smoothed based on yearly averages using loess\nData source: ESPNcricinfo - Design and Analysis by @stevejburr")
 
 dev.off()
+
+#now find most unexpected results
+#these are biggest absolute changes in Elo score
+
+
+data %>%
+  ungroup() %>%
+  mutate(deltaElo=abs(elo1-newElo1)) %>%
+  top_n(10,deltaElo) %>%
+  mutate(Loser=if_else(`Team 1`==Winner,`Team 2`,`Team 1`)) %>%
+  mutate(description=paste0(Winner," beat ",Loser, " in ",Ground, " - ",`Match Date`)) %>%
+  select(description,deltaElo,Winner_Type) %>%
+  mutate(description=as.factor(description),
+         description=fct_reorder(description,deltaElo)) %>%
+  ggplot(aes(x=description,y=deltaElo,fill=Winner_Type)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous("Elo score change")+
+  scale_x_discrete("")+
+  scale_fill_discrete("",labels=c("Away win","Home win"))+
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text=element_text(colour="grey50"),
+        text=element_text(colour="grey50",size=17),
+        axis.title=element_text(colour="grey50"),
+        axis.text=element_text(colour="grey50"))+
+  labs(title="Top 10 unexpected test cricket match results since 1946",
+       subtitle="Based on change in Elo score - not accounting for home advantage",
+       caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr") -> p
+
+#have to do manual fudge of title due to size of labels and alignment
+#this extracts the table of alignments and overwrites the left value of title/subtitle
+g <- ggplotGrob(p)
+g$layout$l[g$layout$name%in%c("title","subtitle")] <- 4
+
+png("unexpexted_text_results.png",width=700,height=700,res=72,type="cairo-png")
+grid::grid.draw(g)
+dev.off()
+#note that most of the unexpected results are home wins...
+
+
+#now calculate unexpected series results by dividing this delta by number of games in a series
+
+data %>%
+  ungroup() %>%
+  mutate(deltaElo=abs(elo1-newElo1)) %>%
+  group_by(`Team 1`,`Team 2`, series_id) %>%
+  summarise(mDate=min(mDate),
+            deltaElo=sum(deltaElo),
+            count=n()) %>%
+  mutate(avgDeltaElo=deltaElo/count,
+         mDate=lubridate::year(mDate)) %>%
+  ungroup() %>%
+  filter(count>=3) %>%
+  top_n(10,avgDeltaElo) %>%
+  arrange(-avgDeltaElo) -> unexpected_series
+
+#need to seperately compute a "year" for the series and the result (wins per side)
+data %>%
+  group_by(series_id) %>%
+  mutate(t1Win=if_else(`Winner`==`Team 1`,1,0)) %>%
+  summarise(t1Win=sum(t1Win)) -> t1Win
+
+data %>%
+  group_by(series_id) %>%
+  mutate(t2Win=if_else(`Winner`==`Team 2`,1,0)) %>%
+  summarise(t2Win=sum(t2Win)) -> t2Win
+
+#combine these
+unexpected_series %>%
+  left_join(t1Win) %>%
+  left_join(t2Win) %>%
+  mutate(description=paste0(`Team 1`," vs ",`Team 2`,
+                            " ",t1Win,"-",t2Win," - ",mDate),
+         description=as.factor(description),
+         description=fct_reorder(description,avgDeltaElo)) %>%
+  ggplot(aes(x=description,y=avgDeltaElo))+
+  geom_col(fill="grey70")+
+  coord_flip() +
+  scale_y_continuous("Avg Elo score change")+
+  scale_x_discrete("")+
+  theme_minimal() +
+  theme(panel.grid = element_blank(),
+        strip.text=element_text(colour="grey50"),
+        text=element_text(colour="grey50",size=17),
+        axis.title=element_text(colour="grey50"),
+        axis.text=element_text(colour="grey50"))+
+  labs(title="Top 10 unexpected test cricket series results since 1946 - 3 match+ series",
+       subtitle="Based on change in Elo score - not accounting for home advantage",
+       caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr") ->p
+
+g <- ggplotGrob(p)
+g$layout$l[g$layout$name%in%c("title","subtitle")] <- 4
+
+png("unexpexted_text_series_results.png",width=700,height=700,res=72,type="cairo-png")
+grid::grid.draw(g)
+dev.off()
+
