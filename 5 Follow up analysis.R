@@ -189,3 +189,107 @@ png("unexpexted_text_series_results.png",width=700,height=700,res=72,type="cairo
 grid::grid.draw(g)
 dev.off()
 
+
+#now try to improve using a simple ordinal regression approach
+#accounts for home advantage + draw %age
+#https://stats.idre.ucla.edu/r/dae/ordinal-logistic-regression/
+data %>%
+  ungroup() %>%
+  select(`Team 1`, `Team 2`, Winner_Type,dif1) %>%
+  mutate(Winner_Type=factor(
+    Winner_Type, levels=c("Away","Draw","Home"))
+    ) -> data_mod
+
+model<- MASS::polr(Winner_Type ~ dif1,data=data_mod, Hess = TRUE)
+
+summary(model)
+
+predictions <- predict(model,data_mod,type="probs")
+
+data <- cbind(as.data.frame(data),as.data.frame(predictions))
+
+#check for correlation with Elo approach
+plot(data$e1,data$Home)
+
+#look at gap - but this doesn't quite work due to net change in number of results
+plot(data$mDate,data$Home-data$e1)
+
+#if we "renormalise" (i.e. remove draws) then it's a fair comparison
+plot(data$mDate,(data$Home/(data$Home+data$Away))-data$e1)
+
+#make nicer ggplot version of these diagnostic plots
+data %>%
+  mutate(normHome=Home/(Home+Away),
+         normAway=Away/(Home+Away)) %>%
+  ggplot() +
+  geom_point(aes(x=e1,y=normHome),colour="steelblue")+
+  geom_point(aes(x=e2,y=normAway),colour="grey50") +
+  annotate("text",x=0.3,y=0.6,label="Home team",colour="steelblue",size=8)+
+  annotate("text",y=0.3,x=0.6,label="Away team",colour="grey50",size=8)+
+  scale_x_continuous("Elo based win probability",
+                     breaks=seq(0,1,0.1),
+                     limits=c(0,1.01))+
+  scale_y_continuous("Model based win probability",
+                     breaks=seq(0,1,0.1),
+                     limits=c(0,1.01))+
+  theme_minimal() +
+  theme(text=element_text(colour="grey50",size=17),
+        axis.title=element_text(colour="grey50"),
+        axis.text=element_text(colour="grey50"),
+        panel.grid=element_blank()) +
+  labs(title="Elo win probabilites vs Ordinal logistic regress probabilities",
+       subtitle="The model predicts result (Home win/lose/draw) using Elo gap.\nThe gap between the sets of lines v.roughly shows modelled home advantage.\nIn %point terms, this effect shrinks as the teams become more inbalanced.\nTo enable a fair comparison with the pure Elo approach draws are ignored here.",
+       caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr") -> p
+
+png("model_vs_elo1.png",width=700,height=700,res=72,type="cairo-png")
+p
+dev.off()
+
+data %>%
+  mutate(normHome=Home/(Home+Away),
+         HA=normHome-e1) %>%
+  ggplot() +
+  #geom_point(aes(x=mDate,y=HA),colour="steelblue")+
+  geom_smooth(aes(x=mDate,y=HA),colour="steelblue",se=F)+
+  theme_minimal() +
+  theme(text=element_text(colour="grey50",size=17),
+        axis.title=element_text(colour="grey50"),
+        axis.text=element_text(colour="grey50"),
+        panel.grid=element_blank())
+
+#still needs some tidying here ^^^
+
+#nb direction of HA is not consistent with previous results
+#but note this isn't being modelled explictly
+#and not strictly correct to just compare elo to model, but good to sense check
+
+#ACTUALLY CREATE A DATASET WHICH REVERSES EVERY PREDICTION TO CALCULATE HA
+
+
+#not really properly validated these models here, or thought about alternatives
+#but feels that it's doing about the right thing
+#challenge is that draw gets less likely with time, but is middle point in scale
+#definitely possible to improve on this
+
+#do a quick test by reversing the difference + getting predictions
+#ideally the win %age should change by approximately the same as other approahces (10-20%)
+
+
+#APPLY MODEL PREDICTIONS TO EACH GAME IN A SERIES
+#NEED TO WRITE A NOTE IN WRITE UP EXPLAINING THAT IT UPDATES AFTER EACH GAME AND ISN'T PERFECTLY THE SAME AS A PREGAME EXPECTATION
+#I.E. IF YOU LOSE FIRST TEST WHEN YOU SHOULDN'T, THIS APPROACH WOULD THEN EXPECT YOU TO BE MORE LIKELY TO LOSE SUBSEQUENT MATCHES
+
+#DO A FEW RECENT CASE STUDIES (E.G. INDIA WINNING IN AUSTRALIA, ENGLAND WI) TO COMPUTE HA / SEE LIKELIHOOD OF SERIES RESULT
+
+
+#potential build on ordinal regression by adding (home/away coefficients by team)
+#ideally these might need to vary across time...
+#perhaps too much?
+data %>%
+  ungroup() %>%
+  select(`Team 1`, `Team 2`, Winner_Type,dif1,mDate) %>%
+  mutate(Winner_Type=factor(
+    Winner_Type, levels=c("Away","Draw","Home"))
+  ) %>%
+  MASS::polr(Winner_Type ~ dif1+mDate,data=., Hess = TRUE) %>%
+  confint()
