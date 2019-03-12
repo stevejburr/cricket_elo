@@ -240,7 +240,7 @@ data %>%
   labs(title="Elo win probabilites vs Ordinal logistic regress probabilities",
        subtitle="The model predicts result (Home win/lose/draw) using Elo gap.\nThe gap between the sets of lines v.roughly shows modelled home advantage.\nIn %point terms, this effect shrinks as the teams become more inbalanced.\nTo enable a fair comparison with the pure Elo approach draws are ignored here.",
        caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr") -> p
-
+#this commentary is wrong / needs updating
 png("model_vs_elo1.png",width=700,height=700,res=72,type="cairo-png")
 p
 dev.off()
@@ -259,12 +259,75 @@ data %>%
 
 #still needs some tidying here ^^^
 
+
 #nb direction of HA is not consistent with previous results
 #but note this isn't being modelled explictly
 #and not strictly correct to just compare elo to model, but good to sense check
 
-#ACTUALLY CREATE A DATASET WHICH REVERSES EVERY PREDICTION TO CALCULATE HA
 
+#ACTUALLY CREATE A DATASET WHICH REVERSES EVERY PREDICTION TO CALCULATE HA
+#create a second modelling dataset which swaps differences to represent if game happened elsewhere
+
+data %>%
+  ungroup() %>%
+  select(`Team 1`, `Team 2`, Winner_Type,dif2) %>%
+  rename(dif1="dif2") %>%
+  mutate(Winner_Type=factor(
+    Winner_Type, levels=c("Away","Draw","Home"))
+  ) -> data_mod2
+
+
+predictions2 <- predict(model,data_mod2,type="probs")
+colnames(predictions2) <- c("Away_t","Draw_t","Home_t")
+head(predictions2)
+
+data <- cbind(as.data.frame(data),as.data.frame(predictions2))
+
+data %>% 
+  mutate(normHome=Home/(Home+Away),
+         normAway=Away/(Home+Away),
+         normHome_t=Home_t/(Home_t+Away_t),
+         normAway_t=Away_t/(Home_t+Away_t)) %>%
+  ggplot()+
+  #geom_line(aes(x=-dif1,y=e1,group=1),colour="grey50") +
+  geom_line(aes(x=-dif1,y=Home,group=1),colour="red") +
+  geom_line(aes(x=-dif1,y=Away_t,group=1),colour="steelblue") +
+  #geom_line(aes(x=-dif1,y=Draw, group=1),colour="green") +
+  #geom_line(aes(x=-dif1,y=Draw_t,group=1),colour="grey") +
+  scale_x_continuous("Home team Elo advantage",limits=c(-450,450),breaks=seq(-400,400,100)) +
+  scale_y_continuous("Probability of winning") +
+  labs(title="Modelled home advantage vs Elo score difference",
+       subtitle="The blue line shows how likely the home team would have been to win if the game actually took place away")
+
+
+#now going through + flagging the probability of each result happening:
+data %>%
+  mutate(resultProb=case_when(
+    Winner_Type=="Home" ~ Home,
+    Winner_Type=="Draw" ~ Draw,
+    Winner_Type=="Away" ~ Away
+  )) -> data
+
+#this would give modelled unlikely results
+data %>%
+  top_n(10,-resultProb)
+
+
+#get modelled unlikely series results
+data %>% 
+  group_by(`Team 1`,`Team 2`,series_id) %>%
+  mutate(resultProb=cumsum(log10(resultProb)),
+         resultProb=10^resultProb) %>%
+  filter(Match==max(Match) & Match>=3) %>% 
+  select(`Team 1`,`Team 2`,year,resultProb) %>%
+  ungroup() %>%
+  #top_n(100,-resultProb) %>%
+  left_join(t1Win) %>%
+  left_join(t2Win) %>%
+  mutate(description=paste0(`Team 1`," vs ",`Team 2`,
+                            " ",t1Win,"-",t2Win," - ",year)) %>%
+  arrange(resultProb) %>% 
+  mutate(rank=1:n()) %>% View()
 
 #not really properly validated these models here, or thought about alternatives
 #but feels that it's doing about the right thing
@@ -293,3 +356,5 @@ data %>%
   ) %>%
   MASS::polr(Winner_Type ~ dif1+mDate,data=., Hess = TRUE) %>%
   confint()
+
+#sense check time dependence of this
