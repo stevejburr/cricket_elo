@@ -348,13 +348,122 @@ data %>%
 #potential build on ordinal regression by adding (home/away coefficients by team)
 #ideally these might need to vary across time...
 #perhaps too much?
+
 data %>%
   ungroup() %>%
   select(`Team 1`, `Team 2`, Winner_Type,dif1,mDate) %>%
   mutate(Winner_Type=factor(
     Winner_Type, levels=c("Away","Draw","Home"))
   ) %>%
-  MASS::polr(Winner_Type ~ dif1+mDate,data=., Hess = TRUE) %>%
-  confint()
+  MASS::polr(Winner_Type ~ dif1+mDate,data=., Hess = TRUE) -> model_middle
 
+data %>%
+  ungroup() %>%
+  select(`Team 1`, `Team 2`, Winner_Type,dif1,mDate) %>%
+  mutate(Winner_Type=factor(
+    Winner_Type, levels=c("Away","Draw","Home"))
+  ) %>%
+  MASS::polr(Winner_Type ~ dif1+mDate+`Team 1`+`Team 2`,data=., Hess = TRUE) -> model_complex
+
+data %>%
+  ungroup() %>%
+  select(`Team 1`, `Team 2`, Winner_Type,dif1,mDate) %>%
+  mutate(Winner_Type=factor(
+    Winner_Type, levels=c("Away","Draw","Home"))
+  ) %>%
+  MASS::polr(Winner_Type ~ dif1+mDate*`Team 1`+mDate*`Team 2`,data=., Hess = TRUE) -> model_v_complex
+
+anova(model,model_middle,model_complex,model_v_complex)
 #sense check time dependence of this
+
+
+
+# 12/10/2019 - apply per game model to the number of games in the series
+
+predictions_complex <- predict(model_complex,data,type="probs")
+colnames(predictions_complex) <- c("Away Complex","Draw Complex","Home Complex")
+
+# first extract the number of games, the number of
+
+data %>%
+  group_by(series_id,`Team 1`,`Team 2`) %>%
+  summarise(year=min(year)) %>%
+  left_join(t1Win) %>%
+  left_join(t2Win) %>%
+  mutate(description=paste0(`Team 1`," vs ",`Team 2`," ",t1Win,"-",t2Win," - ",year)) %>%
+  ungroup() %>%
+  select(series_id, description) -> series_description
+
+data %>%
+  cbind(predictions_complex) %>%
+  left_join(series_description) %>%
+  group_by(description, series_id) %>%
+  mutate(Matches=max(Match)) %>% 
+  filter(Match==1) %>%
+  select(Matches,Away, Draw, Home,`Away Complex`,`Draw Complex`,`Home Complex`) %>%
+  left_join(t1Win) %>%
+  left_join(t2Win) -> start_of_series_probs
+
+#check correlation
+start_of_series_probs %>%
+  ggplot(aes(x=Home,y=`Home Complex`)) + geom_point()
+
+
+#check if number of predicted draws is ok
+data %>%
+  mutate(draw=if_else(Winner=="drawn",1,0)) %>%
+  summarise(draws=sum(draw),
+            sum_prob_draws=sum(Draw))
+
+# yes - at atop line level it does fine
+
+#get most probablable results
+#track modelled P(T1 WIn) / P(T2 WIN) / P(Drawn Series) + get these macro probs
+
+set.seed(123)
+start_of_series_probs %>%
+  filter(Matches>=3) %>%
+  # filter(series_id<=3) %>%
+  mutate(reps=10000) %>%
+  #filter(description=="Australia vs England 5-0 - 2013") %>%
+  group_by(reps,description,Matches,t1Win,t2Win) %>%
+  #nest() %>%
+  uncount(reps,.id="rep") %>%
+  uncount(Matches,.remove=F) %>%
+  mutate(prob=map_dbl(1:n(),~runif(1))) %>%
+  mutate(t1Win_sim=if_else(prob>Away+Draw,1,0),
+         t2Win_sim=if_else(prob<= Away,1,0)) %>%
+  group_by(description,Matches,t1Win,t2Win,Away,Draw,Home,rep) %>%
+  summarise(t1Win_sim=sum(t1Win_sim),
+            t2Win_sim=sum(t2Win_sim))%>%
+  mutate(matched=if_else(t1Win==t1Win_sim & t2Win==t2Win_sim,1,0),
+         most_likely_result=paste0(t1Win_sim,"-",t2Win_sim)) -> raw_sims
+
+raw_sims %>%
+  group_by(description,most_likely_result) %>%
+  summarise(times_seen=n()) %>% 
+  mutate(times_seen=times_seen/sum(times_seen)) %>%
+  arrange(description,-times_seen) %>%
+  filter(1:n()==1) -> most_likely_results
+
+# use raw_sims to get to series wins, losses and draws...
+# add this to simulation results.
+  
+raw_sims %>%
+  group_by(description,Away,Draw,Home) %>%
+  summarise(matched=sum(matched)/n()) %>%
+  left_join(most_likely_results) %>%
+  arrange(matched) -> simulation_results
+
+saveRDS(simulation_results,"simulation_results.rds")
+
+
+# use model to get "probability of winning series" at outset
+
+# try to adjust ELO for home advantage??!
+
+# %>%
+#   summarise(t1Win_sim=sum(t1Win_sim),
+#             reps=n()) %>%
+#   mutate(total=reps*Matches,
+#          home_perc = t1Win_sim/total)
