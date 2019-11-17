@@ -391,8 +391,11 @@ data %>%
   left_join(t1Win) %>%
   left_join(t2Win) %>%
   mutate(description=paste0(`Team 1`," vs ",`Team 2`," ",t1Win,"-",t2Win," - ",year)) %>%
+  mutate(t1Win_series=if_else(t1Win>t2Win,1,0),
+         t2Win_series=if_else(t2Win>t1Win,1,0),
+         tied_series=if_else(t1Win==t2Win,1,0)) %>%
   ungroup() %>%
-  select(series_id, description) -> series_description
+  select(series_id, description,t1Win_series,t2Win_series,tied_series) -> series_description
 
 data %>%
   cbind(predictions_complex) %>%
@@ -448,14 +451,55 @@ raw_sims %>%
 
 # use raw_sims to get to series wins, losses and draws...
 # add this to simulation results.
+
+raw_sims %>%
+  mutate(t1Win_sim_series=if_else(t1Win_sim>t2Win_sim,1,0),
+         t2Win_sim_series=if_else(t2Win_sim>t1Win_sim,1,0),
+         tied_sim_series=if_else(t1Win_sim==t2Win_sim,1,0)) %>%
+  group_by(description) %>%
+  summarise(t1Win_sim_series=sum(t1Win_sim_series),
+            t2Win_sim_series=sum(t2Win_sim_series),
+            tied_sim_series=sum(tied_sim_series),
+            count=n()) %>%
+  mutate(t1Win_sim_series=t1Win_sim_series/count,
+         t2Win_sim_series=t2Win_sim_series/count,
+         tied_sim_series=tied_sim_series/count) %>%
+  select(-count) -> series_sim_results
+  
   
 raw_sims %>%
   group_by(description,Away,Draw,Home) %>%
   summarise(matched=sum(matched)/n()) %>%
-  left_join(most_likely_results) %>%
+  left_join(most_likely_results) %>% 
+  left_join(series_sim_results) %>%
+  left_join(series_description) %>%
   arrange(matched) -> simulation_results
 
 saveRDS(simulation_results,"simulation_results.rds")
+
+#unlikely series wins:
+
+simulation_results %>%
+  mutate(gap=case_when(t1Win_series==1 ~ 1- t1Win_sim_series,
+                       t2Win_series==1 ~ 1- t2Win_sim_series,
+                       TRUE ~0)) %>% arrange(-gap) %>% View()
+
+# ^^ format this as nice table - do unlikely series results and unlikely series winners
+# get neatly formatted tables, show top 10 as a graphic (?) + save others as .csv
+
+
+simulation_results %>%
+  mutate(prob_of_result=case_when(t1Win_series==1  ~t1Win_sim_series,
+                       t2Win_series== 1 ~ t2Win_sim_series,
+                       TRUE ~ tied_sim_series)) %>% #pull(prob_of_result) %>% summary()
+  ggplot() +
+  geom_histogram(aes(x=prob_of_result))
+
+# get ELO probabilities + compare results? (use e1/e2 for individual games in series, then simulate series)
+# get more complex probabilities + compare results?
+# look at distributions of probs, but also look at number of times series is called correctly...
+# use half shape distribution / dot plots? then can do all on same graph!!!! WOOO?!
+
 
 
 # use model to get "probability of winning series" at outset
