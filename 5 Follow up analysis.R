@@ -482,7 +482,15 @@ saveRDS(simulation_results,"simulation_results.rds")
 simulation_results %>%
   mutate(gap=case_when(t1Win_series==1 ~ 1- t1Win_sim_series,
                        t2Win_series==1 ~ 1- t2Win_sim_series,
-                       TRUE ~0)) %>% arrange(-gap) %>% View()
+                       TRUE ~0)) %>% 
+  arrange(-gap) %>% 
+  head(10) %>%
+  ungroup() %>%
+  mutate(prob_winner=scales::percent(1-gap)) %>%
+  select(description,
+         most_likely_result,
+         prob_winner) %>%
+  write_csv("unlikely_series_winners.csv")
 
 # ^^ format this as nice table - do unlikely series results and unlikely series winners
 # get neatly formatted tables, show top 10 as a graphic (?) + save others as .csv
@@ -494,6 +502,58 @@ simulation_results %>%
                        TRUE ~ tied_sim_series)) %>% #pull(prob_of_result) %>% summary()
   ggplot() +
   geom_histogram(aes(x=prob_of_result))
+
+
+# Validation -
+
+simulation_results %>%
+  mutate(group=ceiling(t1Win_sim_series/0.1)*0.1) %>%
+  group_by(group) %>%
+  summarise(correct=sum(t1Win_series),
+            count=n(),
+            perc=correct/count) -> t1
+
+simulation_results %>%
+  mutate(group=ceiling(t2Win_sim_series/0.1)*0.1) %>%
+  group_by(group) %>%
+  summarise(correct=sum(t2Win_series),
+            count=n(),
+            perc=correct/count) -> t2
+
+simulation_results %>%
+  mutate(group=ceiling(tied_sim_series/0.1)*0.1) %>%
+  group_by(group) %>%
+  summarise(correct=sum(tied_series),
+            count=n(),
+            perc=correct/count) -> draw
+
+png("validation_plot.png",width=700,height=700,res=72,type="cairo-png")
+
+t1 %>%
+  select(-perc) %>%
+  left_join(t2 %>% select(-perc),by="group") %>%
+  left_join(draw %>% select(-perc),by="group") %>%
+  replace_na(list(correct=0,count=0)) %>%
+  group_by(group) %>%
+  transmute(correct=correct+correct.x+correct.y,
+            count=count+count.x+count.y,
+            perc=correct/count) %>%
+  mutate(desc=paste0(100*(group-0.1),"% to ",100*group,"%")) %>%
+  mutate(desc=as.factor(desc),
+         desc=fct_reorder(desc,-group)) %>%
+  ggplot() +
+  geom_col(aes(x=desc,y=perc))+
+  coord_flip() +
+  scale_y_continuous(breaks=seq(0,1,0.1),labels=scales::percent_format(accuracy=1))+
+  labs(x="Model probability of event happening",
+       y="Observed probabilty of event happening",
+       title="The model appears mostly well calibrated, likely events happen more often",
+       subtitle="The model is slightly over confident in likely events") +
+  theme_minimal(base_family = "Raleway") +
+  theme(panel.grid=element_blank(),
+        text=element_text(colour="grey50"))
+
+dev.off()
 
 # get ELO probabilities + compare results? (use e1/e2 for individual games in series, then simulate series)
 # get more complex probabilities + compare results?

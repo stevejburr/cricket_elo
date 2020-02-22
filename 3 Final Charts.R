@@ -318,3 +318,47 @@ data %>%
   geom_smooth(se=F) +
   labs(title="Smoothed trend by country on individual games")
 
+
+
+
+# 22-02-2020 - Elo update:
+
+windowsFonts(Raleway="Raleway")
+
+png("test_cricket_elo_22_02_2020.png",width=700,height=700,res=72,type="cairo-png")
+
+
+
+country_elos_over_time %>%
+  filter(year>=2010) %>%
+  ggplot() +
+  geom_line(aes(x=year,y=Elo,colour=Country),show.legend = F,size=1.5) +
+  geom_text_repel(data=(country_elos_over_time %>% filter(year==2020)),
+                  aes(x=2022,y=Elo,colour=Country,label=Country),
+                  direction="y",segment.size=NA,show.legend = F,
+                  hjust="left",size=8,
+                  family="Raleway") +
+  scale_x_continuous("",breaks=seq(2010,2020,1)) +
+  scale_y_continuous("Team Elo Rating")+
+  scale_colour_manual("Team",values=c("Australia"="#dddd0f",
+                                      "Bangladesh"="#005600",
+                                      "England"="#013166",
+                                      "India"="#00b8ff",
+                                      "New Zealand"="#000000",
+                                      "Pakistan"="#008080",
+                                      "South Africa"="#006651",
+                                      "Sri Lanka"="#0000FF",
+                                      "West Indies"="#800000",
+                                      "Zimbabwe"="#FF0000")
+  )+
+  coord_cartesian(xlim=c(2010,2025))+
+  theme_minimal(base_family = "Raleway") +
+  theme(panel.grid = element_blank(),
+        text=element_text(colour="grey50",size=17),
+        axis.title=element_text(colour="grey50"),
+        axis.text=element_text(colour="grey50"))+
+  labs(title="Up to 22 Feb 2020, India are the world's best test team",
+       caption="Data source: ESPNcricinfo - Design and Analysis by @stevejburr",
+       subtitle = "End of year Elo figures + most recent available for current year") 
+
+dev.off()
