@@ -54,7 +54,7 @@ getTestResultsYear <- function(year) {
 
 
 
-years <- 1946:2019
+years <- 1946:2020
 #map the download process across all the years
 testData<-map_dfr(years,getTestResultsYear)
 
